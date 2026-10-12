@@ -11,7 +11,7 @@ go get github.com/mastizada/servicehttp
 ## Features
 
 - **Thin wrapper** over `http.Client` / `http.Transport`; the transport is always reachable via `client.Transport()`.
-- **Tuned defaults**: 10s per-attempt timeout, keep-alives, HTTP/2, 64 idle connections per host.
+- **Tuned defaults**: 5s per-attempt timeout, keep-alives, HTTP/2, 100 idle connections per host (see [defaults](#defaults)).
 - **Typed JSON**: `Get[T]`, `Post[T]`, `Do[T]`, plus `GetRaw` and `Get[json.RawMessage]` for polymorphic payloads.
 - **Structured errors**: any status >= 400 becomes `*servicehttp.Error` with raw body, headers and auto-extracted `Message` / `Code`.
 - **Retries**: exponential backoff with full jitter and pluggable `RetryEvaluator`s.
@@ -53,15 +53,30 @@ c := servicehttp.New(
 
 | Option | Default | Notes |
 |---|---|---|
-| `WithTimeout(d)` | `10s` | Per attempt, includes reading the body. `0` disables. |
+| `WithTimeout(d)` | `5s` | Per attempt, includes reading the body. `0` disables. |
 | `WithMaxRetries(n)` | `0` | Retries after the first attempt. Off by default so POSTs are never replayed by accident. |
 | `WithRetryEvaluator(e)` | errors + 502/503/504 | `nil` restores the default. |
-| `WithBackoff(base, max)` | `100ms`, `2s` | Delay before retry n is random in `[0, min(max, base*2^n)]`. |
+| `WithBackoff(base, max)` | `50ms`, `1s` | Delay before retry n is random in `[0, min(max, base*2^n)]`. |
 | `WithHeader(k, v)` | none | Default header; request headers win. |
 | `WithTracing(bool)` / `WithMetrics(bool)` | off | Independent. |
-| `WithMaxIdleConnsPerHost(n)` | `64` | `New` only. |
+| `WithMaxIdleConnsPerHost(n)` | `100` | `New` only. |
 | `WithMaxConnsPerHost(n)` | unlimited | `New` only. |
 | `WithTransport(rt)` | built-in | `New` only. Bring your own TLS, proxies, test doubles. |
+
+#### Defaults
+
+Tuned for API microservices calling a handful of upstreams: fail fast, keep many warm connections, never hammer a struggling dependency.
+
+| Setting | Value | Why |
+|---|---|---|
+| Per-attempt timeout | `5s` | Bounds tail latency so callers fail fast. |
+| Dial timeout | `2s` | An unreachable pod should not eat the request budget. |
+| TLS handshake timeout | `3s` | Same reasoning. |
+| Idle connections per host | `100` | Go's stdlib default of 2 forces reconnects under concurrent load. |
+| Idle connection timeout | `30s` | Below the 60s idle timeout common on load balancers, avoiding reuse of connections the peer just closed. |
+| Max connections per host | unlimited | Cap it per upstream with `WithMaxConnsPerHost`. |
+| Retries | `0` | Retry amplification causes outages and POSTs are not always idempotent; enable per integration. |
+| Backoff | `50ms` to `1s`, full jitter | Short enough to fit a few retries inside a typical request deadline. |
 
 The plain methods (`Get`, `Post`, `Put`, `Patch`, `Delete`, `Do`) return `*http.Response` and apply retries, but do not turn 4xx/5xx into errors.
 

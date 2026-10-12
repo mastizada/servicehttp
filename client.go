@@ -29,8 +29,11 @@ type Client struct {
 	hc   *http.Client      // base wrapped with telemetry as configured
 }
 
-// New returns a client with defaults tuned for east-west traffic: a 10s
-// per-attempt timeout, keep-alives and 64 idle connections per host.
+// New returns a client with defaults tuned for API microservices: a 5s
+// per-attempt timeout, a 2s dial timeout, a 3s TLS handshake timeout,
+// keep-alives, and 100 idle connections per host that are dropped after 30s
+// idle (below the 60s idle timeout common on load balancers, so a connection
+// the peer just closed is not reused).
 func New(opts ...Option) *Client {
 	cfg := defaultConfig()
 	for _, o := range opts {
@@ -41,14 +44,14 @@ func New(opts ...Option) *Client {
 		base = &http.Transport{
 			Proxy: http.ProxyFromEnvironment,
 			DialContext: (&net.Dialer{
-				Timeout:   5 * time.Second,
+				Timeout:   2 * time.Second,
 				KeepAlive: 30 * time.Second,
 			}).DialContext,
 			ForceAttemptHTTP2:     true,
 			MaxIdleConnsPerHost:   cfg.MaxIdleConnsPerHost,
 			MaxConnsPerHost:       cfg.MaxConnsPerHost,
-			IdleConnTimeout:       90 * time.Second,
-			TLSHandshakeTimeout:   5 * time.Second,
+			IdleConnTimeout:       30 * time.Second,
+			TLSHandshakeTimeout:   3 * time.Second,
 			ExpectContinueTimeout: time.Second,
 		}
 	}

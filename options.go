@@ -69,11 +69,11 @@ type Config struct {
 
 func defaultConfig() Config {
 	return Config{
-		Timeout:             10 * time.Second,
+		Timeout:             5 * time.Second,
 		RetryEvaluator:      defaultRetryEvaluator,
-		BackoffBase:         100 * time.Millisecond,
-		BackoffMax:          2 * time.Second,
-		MaxIdleConnsPerHost: 64,
+		BackoffBase:         50 * time.Millisecond,
+		BackoffMax:          time.Second,
+		MaxIdleConnsPerHost: 100,
 	}
 }
 
